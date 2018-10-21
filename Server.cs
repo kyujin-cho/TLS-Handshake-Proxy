@@ -3,30 +3,27 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace TLS_Handshake_Proxy {
-  public class Server {
-    static void Main(string[] args) {
-      Console.WriteLine("Hello World!");
-    }
-  }
-  class TLSHandshakeServer {
+  public class TLSHandshakeServer {
     private TcpListener tcpListener;
     private byte[] key;
     bool isRunning = false;
 
-    TLSHandshakeServer(int port, byte[] key) {
+    public TLSHandshakeServer(int port, byte[] key) {
       tcpListener = new TcpListener(IPAddress.Any, port);
       this.key = key;
     }
 
-    async void start() {
+    public async void start() {
       AsyncEchoServer().Wait();
     }
 
-    void stop() { 
+    public void stop() { 
       isRunning = false;
+      tcpListener.Stop();
     }
     
     async Task AsyncEchoServer() {
@@ -41,31 +38,45 @@ namespace TLS_Handshake_Proxy {
       TcpClient tc = (TcpClient) o;
       NetworkStream stream = tc.GetStream();
       byte[] encryptedInput, decryptedOutput, encryptedOutput;
-      string decryptedInput;
+      byte[] data;
       int numBytesRead = 0;
       byte[] outBuf = new byte[1024];
 
       using(var ms = new MemoryStream()) {
-        while ((numBytesRead = stream.Read(outBuf, 0, outBuf.Length)) > 0) ms.Write(outBuf, 0, numBytesRead);
+        while (stream.DataAvailable && (numBytesRead = stream.Read(outBuf, 0, outBuf.Length)) > 0) {
+          ms.Write(outBuf, 0, numBytesRead);
+          if(!stream.DataAvailable) break;
+        }
         encryptedInput = ms.ToArray();
       }
-      decryptedInput = Encoding.UTF8.GetString(SecurityModule.AESDecrypt256(encryptedInput, key));
-      string[] split = decryptedInput.Split('|');
+      string[] split = Encoding.UTF8.GetString(encryptedInput).Split('|');
       string ipAddr = split[0];
       int port = Int32.Parse(split[1]);
-      byte[] data = Convert.FromBase64String(split[2]);
+      data = SecurityModule.AESDecrypt256(Convert.FromBase64String(split[2]), key);
 
+      System.Console.WriteLine(BitConverter.ToString(data).Replace('-', ' '));
+      System.Console.WriteLine($"Opening socket to {ipAddr}:{port}");
       TcpClient proxy = new TcpClient(ipAddr, port);
+      proxy.NoDelay = true;
+      System.Console.WriteLine($"Socket opened to {ipAddr}:{port} - sending {data.Length} bytes");
       NetworkStream proxyStream = proxy.GetStream();
       proxyStream.Write(data, 0, data.Length);
+      proxyStream.Flush();
+      System.Console.WriteLine($"Sent {data.Length} bytes");
 
+      int nBytes = 0;
       using(var ms = new MemoryStream()) {
-        while ((numBytesRead = proxyStream.Read(outBuf, 0, outBuf.Length)) > 0) ms.Write(outBuf, 0, numBytesRead);
+        while ((numBytesRead = proxyStream.Read(outBuf, 0, outBuf.Length)) > 0) {
+          ms.Write(outBuf, 0, numBytesRead);
+          nBytes += numBytesRead;
+          if(!proxyStream.DataAvailable) break;
+        }
         decryptedOutput = ms.ToArray();
       }
+      System.Console.WriteLine($"Received {nBytes} bytes");
 
       encryptedOutput = SecurityModule.AESEncrypt256(decryptedOutput, key);
-      stream.Write(encryptedOutput, 0, encryptedOutput.Length);
+      stream.Write(encryptedOutput, 0, nBytes);
       stream.Flush();
       stream.Close();
     }
