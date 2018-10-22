@@ -46,11 +46,16 @@ namespace TLS_Handshake_Proxy {
       using(var ms = new MemoryStream()) {
         while (stream.DataAvailable && (numBytesRead = stream.Read(outBuf, 0, outBuf.Length)) > 0) {
           ms.Write(outBuf, 0, numBytesRead);
-          if(!stream.DataAvailable) break;
         }
         encryptedInput = ms.ToArray();
       }
+      System.Console.WriteLine(Encoding.UTF8.GetString(encryptedInput));
       string[] split = Encoding.UTF8.GetString(encryptedInput).Split('|');
+      if(split.Length < 2) {
+        stream.Write(new byte[]{00}, 0, 1);
+        stream.Close();
+        return;
+      }
       string ipAddr = split[0];
       int port = Int32.Parse(split[1]);
       data = SecurityModule.AESDecrypt256(Convert.FromBase64String(split[2]), key);
@@ -70,14 +75,15 @@ namespace TLS_Handshake_Proxy {
         while ((numBytesRead = proxyStream.Read(outBuf, 0, outBuf.Length)) > 0) {
           ms.Write(outBuf, 0, numBytesRead);
           nBytes += numBytesRead;
-          if(!proxyStream.DataAvailable) break;
         }
         decryptedOutput = ms.ToArray();
       }
-      System.Console.WriteLine($"Received {nBytes} bytes");
+      System.Console.WriteLine($"Received {nBytes} bytes from remote");
+      System.Console.WriteLine(BitConverter.ToString(decryptedOutput).Replace("-", " "));
 
       encryptedOutput = SecurityModule.AESEncrypt256(decryptedOutput, key);
-      stream.Write(encryptedOutput, 0, nBytes);
+      stream.Write(encryptedOutput, 0, encryptedOutput.Length);
+      System.Console.WriteLine($"Sent {encryptedOutput.Length} bytes to proxy client");
       stream.Flush();
       stream.Close();
     }
