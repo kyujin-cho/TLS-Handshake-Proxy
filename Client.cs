@@ -44,11 +44,11 @@ namespace TLS_Handshake_Proxy {
       tcpListener.Start();
       isRunning = true;
 
-      // while(isRunning) { 
+      while(isRunning) { 
         TcpClient tc = tcpListener.AcceptTcpClient();
         AsyncTcpProcess(tc);
         // Task.Factory.StartNew(AsyncTcpProcess, tc);
-      // }
+      }
     }
 
     public void stop() { 
@@ -92,15 +92,12 @@ namespace TLS_Handshake_Proxy {
 
       int nBytes = 0;
       using(var ms = new MemoryStream()) {
-        while((numBytesRead = stream.Read(outBuf, 0, outBuf.Length)) > 0) {
+        while(stream.DataAvailable && (numBytesRead = stream.Read(outBuf, 0, outBuf.Length)) > 0) {
           ms.Write(outBuf, 0, outBuf.Length); 
           nBytes += numBytesRead;
           System.Console.WriteLine(numBytesRead);
-          if(!stream.DataAvailable) break;
         }
-        buff = new byte[nBytes];
-        ms.Seek(0, SeekOrigin.Begin);
-        ms.Read(buff, 0, nBytes);
+        buff = ms.ToArray();
       }
       System.Console.WriteLine(BitConverter.ToString(buff).Replace("-", " "));
 
@@ -118,13 +115,14 @@ namespace TLS_Handshake_Proxy {
         NetworkStream encryptedStream = encrypted.GetStream();
         encryptedStream.Write(body, 0, body.Length);
 
+        
         using(var ms = new MemoryStream()) {
-          while ((numBytesRead = encryptedStream.Read(outBuf, 0, outBuf.Length)) > 0) {
+          while (encryptedStream.DataAvailable && (numBytesRead = encryptedStream.Read(outBuf, 0, outBuf.Length)) > 0) {
             ms.Write(outBuf, 0, numBytesRead);
-            if(!encryptedStream.DataAvailable) break;
           }
           encryptedInput = ms.ToArray();
         }
+        System.Console.WriteLine($"Received {encryptedInput.Length} bytes");
 
         decryptedInput = SecurityModule.AESDecrypt256(encryptedInput, key);
         stream.Write(decryptedInput, 0, decryptedInput.Length);
@@ -139,7 +137,7 @@ namespace TLS_Handshake_Proxy {
         while (bypassStream.DataAvailable && (numBytesRead = bypassStream.Read(outBuf, 0, outBuf.Length)) > 0) {
           stream.Write(outBuf, 0, numBytesRead);
           System.Console.WriteLine(bypassStream.DataAvailable);
-          if(!bypassStream.DataAvailable) break;
+          
         }
         System.Console.WriteLine("Normal Stream Closed");
       }
