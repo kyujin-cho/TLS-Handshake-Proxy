@@ -31,7 +31,8 @@ namespace TLS_Handshake_Proxy {
       isRunning = true;
       while(isRunning) { 
         TcpClient tc = await tcpListener.AcceptTcpClientAsync().ConfigureAwait(false);
-        Task.Factory.StartNew(AsyncTcpProcess, tc);
+        AsyncTcpProcess(tc);
+        // Task.Factory.StartNew(AsyncTcpProcess, tc);
       }
     }
     async void AsyncTcpProcess(object o) {
@@ -56,12 +57,12 @@ namespace TLS_Handshake_Proxy {
 
       System.Console.WriteLine(BitConverter.ToString(data).Replace('-', ' '));
       System.Console.WriteLine($"Opening socket to {ipAddr}:{port}");
-      TcpClient proxy = new TcpClient(ipAddr, port);
-      proxy.NoDelay = true;
-      System.Console.WriteLine($"Socket opened to {ipAddr}:{port} - sending {data.Length} bytes");
+      TcpClient proxy = new TcpClient();
+      proxy.Connect(ipAddr, port);
+      System.Console.WriteLine($"Socket opened to {ipAddr}:{port} - status: {proxy.Connected}");
+      System.Console.WriteLine($"Sending {data.Length} bytes");
       NetworkStream proxyStream = proxy.GetStream();
       proxyStream.Write(data, 0, data.Length);
-      proxyStream.Flush();
       System.Console.WriteLine($"Sent {data.Length} bytes");
 
       int nBytes = 0;
