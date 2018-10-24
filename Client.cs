@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -47,7 +48,7 @@ namespace TLS_Handshake_Proxy {
       while(isRunning) { 
         TcpClient tc = tcpListener.AcceptTcpClient();
         AsyncTcpProcess(tc);
-        // Task.Factory.StartNew(AsyncTcpProcess, tc);
+        Task.Factory.StartNew(AsyncTcpProcess, tc);
       }
     }
 
@@ -56,7 +57,7 @@ namespace TLS_Handshake_Proxy {
       tcpListener.Stop();
     }
 
-    void AsyncTcpProcess(object o) {
+    async void AsyncTcpProcess(object o) {
       TcpClient tc = (TcpClient) o;
       NetworkStream stream = tc.GetStream();
       byte[] outBuf = new byte[1024];
@@ -105,26 +106,17 @@ namespace TLS_Handshake_Proxy {
       
       if(buff[0] == 0x16) { // TLS Handshake packet
         System.Console.WriteLine("Handshake");
-        byte[] encryptedData = SecurityModule.AESEncrypt256(buff, this.key);
+        var rand = new Random();
+        byte[] iv = new byte[16];
+        rand.NextBytes(iv);
+        byte[] encryptedData = SecurityModule.AESDecrypt256(buff, this.key, iv);
         string bodyString = $"{ipAddr}|{port}|{Convert.ToBase64String(encryptedData)}";
-        byte[] body = Encoding.UTF8.GetBytes(bodyString);
         byte[] encryptedInput, decryptedInput;
-        System.Console.WriteLine($"Sending {bodyString}");
+        encryptedInput = await PostData($"http://{remoteIpAddr}:{remotePort}/tls", bodyString); 
 
-        TcpClient encrypted = new TcpClient(remoteIpAddr, remotePort);
-        NetworkStream encryptedStream = encrypted.GetStream();
-        encryptedStream.Write(body, 0, body.Length);
-
-        
-        using(var ms = new MemoryStream()) {
-          while (encryptedStream.DataAvailable && (numBytesRead = encryptedStream.Read(outBuf, 0, outBuf.Length)) > 0) {
-            ms.Write(outBuf, 0, numBytesRead);
-          }
-          encryptedInput = ms.ToArray();
-        }
         System.Console.WriteLine($"Received {encryptedInput.Length} bytes");
 
-        decryptedInput = SecurityModule.AESDecrypt256(encryptedInput, key);
+        decryptedInput = SecurityModule.AESDecrypt256(encryptedInput, key, iv);
         stream.Write(decryptedInput, 0, decryptedInput.Length);
       } else { // IDK just bypass it
         System.Console.WriteLine($"Normal Packet: Initiating connection to {ipAddr}:{port}");
@@ -196,6 +188,16 @@ namespace TLS_Handshake_Proxy {
       }
       
       return String.Join('.', ipClasses);
+    }
+
+    static async Task<byte[]> PostData(string url, string body) {
+      using(HttpClient client = new HttpClient()) {
+        var response = await client.PostAsync(url, new StringContent(body));
+        response.EnsureSuccessStatusCode();
+
+        string content = await response.Content.ReadAsStringAsync();
+        return Convert.FromBase64String(content);
+      }
     }
   }
 }
