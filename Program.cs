@@ -6,7 +6,7 @@ using System.Threading;
 namespace TLS_Handshake_Proxy { 
   class Program {
     public static void Main(string[] args) {
-      if(args.Length < 1 || (args[0] != "client" && args[0] != "server" && args[0] != "keygen")) {
+      if(args.Length < 1 || (args[0] != "client" && args[0] != "keygen")) {
         System.Console.WriteLine("Usage: proxy <server|client|keygen> [options...]");
         return;
       }
@@ -15,12 +15,6 @@ namespace TLS_Handshake_Proxy {
         case "client": 
           if(args.Length < 4) {
             Console.WriteLine("Usage: proxy client <keyPath> <port> <remoteHost> <remotePort>");
-            return;
-          }
-          break;
-        case "server": 
-          if(args.Length < 3) {
-            Console.WriteLine("Usage: proxy server <keyPath> <port>");
             return;
           }
           break;
@@ -45,15 +39,10 @@ namespace TLS_Handshake_Proxy {
 
       StreamReader reader = new StreamReader(args[1]);
       byte[] key = Encoding.UTF8.GetBytes(reader.ReadToEnd());
-      if(args[0] == "server") {
-        var Server = new TLSHandshakeServer(Int16.Parse(args[2]), key);
-        System.Console.WriteLine("Listening on port " + args[2]);
-        Server.start();
-      } else {
-        var Client = new TLSHandshakeClient(Int16.Parse(args[4]), args[3], Int16.Parse(args[2]), key);
-        System.Console.WriteLine("Listening on port " + args[2]);
-        Client.start();
-      }
+      
+      var Client = new TLSHandshakeClient(Int16.Parse(args[4]), args[3], Int16.Parse(args[2]), key);
+      System.Console.WriteLine("Listening on port " + args[2]);
+      Client.start();
     }
   }
 }

@@ -72,9 +72,13 @@ namespace TLS_Handshake_Proxy {
 
       int nBytes = 0;
       using(var ms = new MemoryStream()) {
-        while ((numBytesRead = proxyStream.Read(outBuf, 0, outBuf.Length)) > 0) {
-          ms.Write(outBuf, 0, numBytesRead);
-          nBytes += numBytesRead;
+        try {
+          while ((numBytesRead = proxyStream.Read(outBuf, 0, outBuf.Length)) > 0) {
+            ms.Write(outBuf, 0, numBytesRead);
+            nBytes += numBytesRead;
+          }
+        } catch(IOException e) {
+          System.Console.WriteLine("Stream closed");
         }
         decryptedOutput = ms.ToArray();
       }
